@@ -126,6 +126,8 @@ def clean_begBesch_data(df, # raw dataframe to clean
     # change year columns value type to integer
     cols=[i for i in df.columns if i not in [code]]
     for col in cols:
+        df[col] = df[col].replace('*', np.nan)
+        df[col] = df[col].replace('-', np.nan)
         df[col] = df[col].astype('Int64')
         
     # melt dataframe
