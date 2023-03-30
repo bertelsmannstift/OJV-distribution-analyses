@@ -1,0 +1,584 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# CHECK IF CRAMERS VALUES ARE THE SAME AFTER PIVOT LONGER (instead of frequency table)
+
+```
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(DescTools)
+library(openxlsx)
+library(broom)
+```
+
+```{r}
+df_raw <- read_excel("../data/output/wz/wz_d_all.xlsx")
+
+```
+
+```{r}
+# options(scipen = 100, digits = 4)
+# 
+# ken_tau <- function(.df) {cor.test(.df$"count_jobid", .df$"count_begBesch_svb", method = "kendall")}
+# 
+# df_raw %>% 
+#   filter(wz2008_level == "gruppe", year == 2020, str_detect(wz2008_code, "^06")) %>% 
+#   #group_by(wz2008_abschnitt_buchstabe) %>% summarise(across(where(is.numeric), sum)) %>% 
+#   na.omit() %>% 
+#   select(wz2008_code, count_jobid, count_begBesch_svb) %>% 
+#   select(count_jobid, count_begBesch_svb) %>% 
+#   cor(method="kendall", use = "complete.obs") %>% 
+#   .[1,2]
+#   #assocstats()
+#   #chisq.test() %>% 
+#   #.$expected
+#   #CramerV(conf.level = T)
+#   #df_raw$count_jobid
+#   #map(cor_test(.$count_jobid, .$count_begBesch_svb, method="kendall"))
+#   #map(ken_tau)
+#   #.$count_jobid
+#   #.$count_jobid
+#   #map(cor(.$"count_jobid", .$"count_begBesch_svb", method="kendall"))
+#   #map(~{cor(method = "kendall")})
+# 
+#   #mutate(model = map(., ken_tau))
+# 
+# cor_test(df$count_jobid, df$count_begBesch_svb, method="kendall")
+# cor(df$count_jobid, df$count_begBesch_svb, method="kendall", use = "complete.obs")
+# 
+# str(ken_tau(df))
+```
+
+```{r}
+df_raw <- read_excel("../data/output/wz/wz_d_all.xlsx")
+
+column1 = "count_begBesch_svb"
+column2 = "count_jobid"
+
+df_raw %>% 
+  filter(wz2008_level == "abteilung", year == 2020) %>% 
+  select(wz2008_code, column1, column2) %>% 
+  na.omit() 
+```
+
+
+
+```{r}
+# Find Kendall's Tau of a SINGLE table
+
+df_raw <- read_excel("../data/output/wz/wz_d_all.xlsx")
+
+column1 = "count_jobid"
+column2 = "count_begBesch_svb"
+
+df_raw %>% 
+  filter(wz2008_level == "gruppe", year == 2020) %>% 
+  select(wz2008_code, column1, column2) %>% 
+  na.omit() -> df
+
+cor(df[[column1]], df[[column2]], method="kendall")
+
+```
+
+```{r}
+# Find Kendall's Tau of MULTIPLE tables (not split by WZ code)
+
+df_raw <- read_excel("../data/output/wz/wz_d_all.xlsx")
+
+CalcCorrelation <- function(df,
+                            abt_or_gruppe, # "abteilung" or "gruppe"
+                            column1,
+                            column2
+                            ) {
+  
+GroupAndSplit <- function(df) {
+  df %>% 
+  filter(wz2008_level == abt_or_gruppe) %>% 
+  na.omit() %>% 
+  group_split(year)
+  }
+
+years <- GroupAndSplit(df_raw) %>% 
+  map(select, c(year)) %>% 
+  map(`[`, 1,1) %>% 
+  map(1)
+
+kendall_values <- GroupAndSplit(df_raw) %>% 
+  map(~cor(.[[column1]], .[column2][], method="kendall"))
+  
+# create tibble
+cbind(tibble(years),
+      tibble(kendall_values)) %>% 
+  unnest(c(years, kendall_values))
+
+}
+
+
+df_raw <- read_excel("../data/output/wz/wz_d_all.xlsx")
+
+abt_or_gruppe = "abteilung"
+
+column1 = "count_besch_svb"
+column2 = "count_begBesch_svb"
+df1 <- CalcCorrelation(df = df_raw,
+                 abt_or_gruppe = abt_or_gruppe,
+                 column1 = column1,
+                 column2 = column2) %>%
+  rename("Jahr" = years) %>% 
+  rename_at(vars("kendall_values"), funs(paste0(column1, " & ", column2)))
+
+
+column1 = "count_besch_svb+gb"
+column2 = "count_begBesch_svb"
+df2 <- CalcCorrelation(df = df_raw,
+                 abt_or_gruppe = abt_or_gruppe,
+                 column1 = column1,
+                 column2 = column2) %>%
+  rename("Jahr" = years) %>% 
+  rename_at(vars("kendall_values"), funs(paste0(column1, " & ", column2)))
+
+
+column1 = "count_jobid"
+column2 = "count_besch_svb"
+df3 <- CalcCorrelation(df = df_raw,
+                 abt_or_gruppe = abt_or_gruppe,
+                 column1 = column1,
+                 column2 = column2) %>%
+  rename("Jahr" = years) %>% 
+  rename_at(vars("kendall_values"), funs(paste0(column1, " & ", column2)))
+
+
+column1 = "count_jobid"
+column2 = "count_begBesch_svb"
+df4 <- CalcCorrelation(df = df_raw,
+                 abt_or_gruppe = abt_or_gruppe,
+                 column1 = column1,
+                 column2 = column2) %>%
+  rename("Jahr" = years) %>% 
+  rename_at(vars("kendall_values"), funs(paste0(column1, " & ", column2)))
+
+
+left_join(df1, df2) %>% left_join(df3) %>% left_join(df4) #%>% 
+#write.xlsx("wz_d_kendall_2steller_non-split.xlsx", overwrite=T)
+
+
+```
+
+
+
+```{r}
+# Find Kendall's Tau of MULTIPLE tables (not split by WZ code) - CONSOLIDATED
+
+CalcCorrelation <- function(df,
+                            abt_or_gruppe, # "abteilung" or "gruppe"
+                            column1,
+                            column2
+                            ) {
+  
+GroupAndSplit <- function(df) {
+  df %>% 
+  filter(wz2008_level == abt_or_gruppe) %>% 
+  na.omit() %>% 
+  group_split(year)
+  }
+
+years <- GroupAndSplit(df_raw) %>% 
+  map(select, c(groups_column, year)) %>% 
+  map(`[`, 1,2) %>% 
+  map(1)
+
+kendall_values <- GroupAndSplit(df_raw) %>% 
+  map(~cor(.[[column1]], .[column2][], method="kendall"))
+  
+# create tibble
+cbind(tibble(years),
+      tibble(kendall_values)) %>% 
+  unnest(c(years, kendall_values))
+
+columns = paste0(column1, " & ", column2)[[1]]
+
+}
+
+
+df_raw <- read_excel("../data/output/wz/wz_d_all.xlsx")
+
+columns = toString(paste0(column1, " & ", column2))
+
+CalcCorrelation(df = df_raw,
+                 abt_or_gruppe = "gruppe",
+                 column1 = "count_besch_svb+gb",
+                 column2 = "count_jobid") %>% 
+
+  rename("Jahr" = years, toString(columns) = kendall_values) #%>% 
+  #write.xlsx("wz_d_kendall_3steller_non-split.xlsx", overwrite=T)
+```
+
+
+
+```{r}
+
+df <- df_raw %>% 
+  filter(wz2008_level == "gruppe")
+
+wz_codes <- unique(df["wz2008_code"])$wz2008_code
+years <- c(2014, 2015, 2016, 2017, 2018, 2019, 2020)
+cramerVlist <- list()
+
+new_list <- list()
+
+for (i in seq_along(years)) {
+  for (j in seq_along(wz_codes))
+  
+    cramerVlist[[toString(years[i])]] <-
+    df_raw %>%
+    filter(year == years[i]) %>%
+    select(count_jobid, count_begBesch_svb) %>%
+    na.omit() %>%
+    CramerV()
+  
+    new_list[[wz_codes[j]]] <- cramerVlist
+
+}
+
+cramerVlist
+
+```
+
+
+
+
+```{r}
+
+# Find
+
+df_raw <- read_excel("../data/output/wz/wz_d_all.xlsx")
+years <- c(2014, 2015, 2016, 2017, 2018, 2019, 2020)
+
+abt_or_gruppe = "abteilung"
+
+
+column1 = "count_besch_svb+gb"
+column2 = "count_begBesch_svb"
+cramerVlist <- list()
+
+for (i in seq_along(years)) {
+  cramerVlist[[toString(years[i])]] <-
+  df_raw %>%
+  filter(wz2008_level == abt_or_gruppe, year == years[i]) %>%
+  #select(count_jobid, count_begBesch_svb) %>%
+  #select("count_beg", "count_besch_svb+gb") %>%
+  select(column1, column2) %>%
+  #select(count_begBesch_svb, "count_besch_svb") %>% 
+  na.omit() %>%
+  CramerV()
+
+}
+
+df1 <- as_tibble(cramerVlist) %>% 
+  pivot_longer(cols=everything(), names_to = "Jahr", values_to = "Cramer_V") %>% 
+  rename_at(vars("Cramer_V"), funs(paste0(column1, " & ", column2)))
+
+
+
+column1 = "count_besch_svb"
+column2 = "count_begBesch_svb"
+cramerVlist <- list()
+
+for (i in seq_along(years)) {
+  cramerVlist[[toString(years[i])]] <-
+  df_raw %>%
+  filter(wz2008_level == abt_or_gruppe, year == years[i]) %>%
+  #select(count_jobid, count_begBesch_svb) %>%
+  #select("count_beg", "count_besch_svb+gb") %>%
+  select(column1, column2) %>%
+  #select(count_begBesch_svb, "count_besch_svb") %>% 
+  na.omit() %>%
+  CramerV()
+
+}
+
+df2 <- as_tibble(cramerVlist) %>% 
+  pivot_longer(cols=everything(), names_to = "Jahr", values_to = "Cramer_V") %>% 
+  rename_at(vars("Cramer_V"), funs(paste0(column1, " & ", column2)))
+
+
+
+column1 = "count_jobid"
+column2 = "count_besch_svb"
+cramerVlist <- list()
+
+for (i in seq_along(years)) {
+  cramerVlist[[toString(years[i])]] <-
+  df_raw %>%
+  filter(wz2008_level == abt_or_gruppe, year == years[i]) %>%
+  #select(count_jobid, count_begBesch_svb) %>%
+  #select("count_beg", "count_besch_svb+gb") %>%
+  select(column1, column2) %>%
+  #select(count_begBesch_svb, "count_besch_svb") %>% 
+  na.omit() %>%
+  CramerV()
+
+}
+
+df3 <- as_tibble(cramerVlist) %>% 
+  pivot_longer(cols=everything(), names_to = "Jahr", values_to = "Cramer_V") %>% 
+  rename_at(vars("Cramer_V"), funs(paste0(column1, " & ", column2)))
+
+
+
+column1 = "count_jobid"
+column2 = "count_begBesch_svb"
+cramerVlist <- list()
+
+for (i in seq_along(years)) {
+  cramerVlist[[toString(years[i])]] <-
+  df_raw %>%
+  filter(wz2008_level == abt_or_gruppe, year == years[i]) %>%
+  #select(count_jobid, count_begBesch_svb) %>%
+  #select("count_beg", "count_besch_svb+gb") %>%
+  select(column1, column2) %>%
+  #select(count_begBesch_svb, "count_besch_svb") %>% 
+  na.omit() %>%
+  CramerV()
+
+}
+
+df4 <- as_tibble(cramerVlist) %>% 
+  pivot_longer(cols=everything(), names_to = "Jahr", values_to = "Cramer_V") %>% 
+  rename_at(vars("Cramer_V"), funs(paste0(column1, " & ", column2)))
+
+
+left_join(df1, df2) %>% left_join(df3) %>% left_join(df4) #%>% 
+#write.xlsx("wz_d_cramer_2steller_non-split.xlsx", overwrite=T)
+
+
+```
+
+
+```{r}
+
+df_raw %>%
+  filter(wz2008_level == "abteilung", year == 2020, wz2008_abschnitt_buchstabe_and_label == "J: Information und Kommunikation") %>%
+  select(wz2008_abschnitt_buchstabe_and_label, wz2008_code, year, count_jobid, count_begBesch_svb) %>% 
+  na.omit() %>%
+  select(count_jobid, count_begBesch_svb) %>% 
+  CramerV()
+```
+
+```{r}
+df_raw %>% 
+  filter(wz2008_level == "abteilung") %>% 
+  select(wz2008_abschnitt_buchstabe_and_label, wz2008_code, year, count_jobid, count_begBesch_svb) %>% 
+  #mutate(abteilung = str_sub(wz2008_code, 1, 2)) %>% 
+  #filter(abteilung == "03")
+  # select(-year, -wz2008_code) %>% 
+  # nest_by(id)
+  na.omit() %>% 
+  filter(wz2008_abschnitt_buchstabe_and_label != "D: Energieversorgung") %>% 
+  group_by(wz2008_abschnitt_buchstabe_and_label, year) %>% 
+  summarise(across(c("count_jobid", "count_begBesch_svb"), CramerV, .names = "cramer"))
+```
+
+
+```{r} 
+df_raw <- read_excel("../data/output/wz/wz_d_all.xlsx")
+
+df_raw %>% 
+  filter(wz2008_level == "abteilung") %>% 
+  select(wz2008_abschnitt_buchstabe_and_label, wz2008_code, year, count_jobid, count_begBesch_svb) %>% 
+  #mutate(abteilung = str_sub(wz2008_code, 1, 2)) %>% 
+  #filter(abteilung == "03")
+  # select(-year, -wz2008_code) %>% 
+  # nest_by(id)
+  #na.omit() %>% 
+  #filter(wz2008_abschnitt_buchstabe_and_label != "D: Energieversorgung") %>% 
+  group_by(wz2008_abschnitt_buchstabe_and_label, year) %>% 
+  #summarise(cor(count_jobid, count_begBesch_svb)) #%>% 
+  summarise(cramerv = CramerV(count_jobid, count_begBesch_svb))
+  
+
+
+```
+
+
+```{r} 
+
+df_raw %>% 
+  filter(wz2008_level == "gruppe") %>% 
+  select(wz2008_code, year, count_jobid, count_begBesch_svb) %>% 
+  mutate(abteilung = str_sub(wz2008_code, 1, 2)) %>% 
+  #filter(abteilung == "03")
+  # select(-year, -wz2008_code) %>% 
+  # nest_by(id)
+  na.omit() %>% 
+  group_by(abteilung, year) %>% 
+  summarise(cramerv = CramerV(count_jobid, count_begBesch_svb))
+  
+
+
+```
+
+```{r}
+
+####
+#THIS WORKSSSS
+###
+
+UltimateFunction <- function(df_raw,
+                             abt_or_gruppe, # "abteilung" or "gruppe"
+                             groups_column, # column to group by, e.g. "wz2008_abschnitt_buchstabe_and_label"
+                             cramer_column1,
+                             cramer_column2,
+                             groups_to_exclude # c() with groups to exclude
+                             ) {
+  
+GroupAndSplit <- function(df_raw) {
+  df_raw %>% 
+  filter(wz2008_level == abt_or_gruppe) %>% 
+  select(groups_column, wz2008_code, year, cramer_column1, cramer_column2) %>% 
+  na.omit() %>% 
+  filter(groups_column != groups_to_exclude) %>% 
+  group_split(.[,groups_column], year)
+  
+  
+}
+
+group_names <- GroupAndSplit(df_raw) %>% 
+  map(select, c(groups_column, year)) %>% 
+  map(`[`, 1,1) %>% 
+  map(1)
+
+years <- GroupAndSplit(df_raw) %>% 
+  map(select, c(groups_column, year)) %>% 
+  map(`[`, 1,2) %>% 
+  map(1)
+
+kendall_values <- GroupAndSplit(df_raw) %>% 
+  map(select, c(cramer_column1, cramer_column2)) %>% 
+  map(~cor(.$"count_jobid", .$"count_begBesch_svb", method="kendall"))
+  
+# create tibble
+cbind(tibble(group_names),
+      tibble(years),
+      tibble(kendall_values)) %>% 
+  unnest(c(group_names, years, kendall_values))
+
+}
+
+df_raw <- read_excel("../data/output/wz/wz_d_all.xlsx") %>% 
+  mutate(abteilung = str_sub(wz2008_code, 1, 2))
+
+UltimateFunction(df_raw,
+                 # abt_or_gruppe = "abteilung",
+                 # groups_column = "wz2008_abschnitt_buchstabe_and_label",
+                 abt_or_gruppe = "gruppe",
+                 groups_column = "abteilung",
+                 cramer_column1 = "count_jobid",
+                 cramer_column2 = "count_begBesch_svb",
+                 groups_to_exclude = c("None")) %>% 
+  left_join(df_raw %>% select(wz2008_code, wz2008_code_and_label), 
+            by=c("group_names" = "wz2008_code")) %>% 
+  mutate(group_names = wz2008_code_and_label) %>% 
+  select(-wz2008_code_and_label) %>% 
+  distinct() %>% 
+  
+  rename("WZ-Abteilung" = group_names, "Jahr" = years, "Kendall's Tau Koeffizient" = kendall_values) %>% 
+  write.xlsx("wz_d_kendall_2steller.xlsx", overwrite=T)
+  
+```
+
+
+
+```{r}
+
+# WORKING
+
+UltimateFunction <- function(df_raw,
+                             abt_or_gruppe, # "abteilung" or "gruppe"
+                             groups_column, # column to group by, e.g. "wz2008_abschnitt_buchstabe_and_label"
+                             cramer_column1,
+                             cramer_column2,
+                             groups_to_exclude # c() with groups to exclude
+                             ) {
+  
+GroupAndSplit <- function(df_raw) {
+  df_raw %>% 
+  filter(wz2008_level == abt_or_gruppe) %>% 
+  select(groups_column, wz2008_code, year, cramer_column1, cramer_column2) %>% 
+  na.omit() %>% 
+  filter(groups_column != groups_to_exclude) %>% 
+  group_split(.[,groups_column], year)
+  
+  
+}
+
+group_names <- GroupAndSplit(df_raw) %>% 
+  map(select, c(groups_column, year)) %>% 
+  map(`[`, 1,1) %>% 
+  map(1)
+
+years <- GroupAndSplit(df_raw) %>% 
+  map(select, c(groups_column, year)) %>% 
+  map(`[`, 1,2) %>% 
+  map(1)
+
+cramersV_values <- GroupAndSplit(df_raw) %>% 
+  map(select, c(cramer_column1, cramer_column2)) %>% 
+  map(CramerV)
+  
+# create tibble
+cbind(tibble(group_names),
+      tibble(years),
+      tibble(cramersV_values)) %>% 
+  unnest(c(group_names, years, cramersV_values))
+
+}
+
+```
+
+```{r}
+
+df_raw <- read_excel("../data/output/wz/wz_d_all.xlsx")
+
+UltimateFunction(df_raw,
+                 abt_or_gruppe = "abteilung",
+                 groups_column = "wz2008_abschnitt_buchstabe_and_label", 
+                 cramer_column1 = "count_jobid",
+                 cramer_column2 = "count_begBesch_svb",
+                 groups_to_exclude = c("None")) %>% 
+  rename("WZ-Buchstabe" = group_names, "Jahr" = years, "Cramer's V-Wert" = cramersV_values) %>% 
+  write.xlsx("wz_d_cramers_1steller.xlsx", overwrite=T)
+
+```
+
+```{r}
+
+df_raw <- read_excel("../data/output/wz/wz_d_all.xlsx") %>% 
+  mutate(abteilung = str_sub(wz2008_code, 1, 2))
+
+
+UltimateFunction(df_raw,
+                 abt_or_gruppe = "gruppe",
+                 groups_column = "abteilung", 
+                 cramer_column1 = "count_jobid",
+                 cramer_column2 = "count_begBesch_svb",
+                 groups_to_exclude = c("None")
+) %>% 
+  left_join(df_raw %>% select(wz2008_code, wz2008_code_and_label), 
+            by=c("group_names" = "wz2008_code")) %>% 
+  mutate(group_names = wz2008_code_and_label) %>% 
+  select(-wz2008_code_and_label) %>% 
+  distinct() %>% 
+  
+  rename("WZ-Abteilung" = group_names, "Jahr" = years, "Cramer's V-Wert" = cramersV_values) %>% 
+  write.xlsx("wz_d_cramers_2steller.xlsx", overwrite=T)
+
+```
+
